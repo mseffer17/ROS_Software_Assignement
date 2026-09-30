@@ -22,10 +22,14 @@ setup(
             'pytest',
         ],
     },
-        entry_points={
+            entry_points={
         'console_scripts': [
             'publisher = rover_commands.publisher:main',
             'subscriber = rover_commands.subscriber:main',
+            'gamepad = rover_commands.gamepad:main',
+            'sensor = rover_commands.sensor:main',
+            'process = rover_commands.process:main',
+            'gps = rover_commands.gps:main',
         ],
     },
 )
