@@ -1,0 +1,80 @@
+###########################################################################
+# Image ROS 2 Humble « base:humble-desktop » construite EN LOCAL.
+#
+# L'image officielle ghcr.io/epflxplore/base:humble-desktop ne se télécharge
+# plus (ses manifestes ont été supprimés côté GitHub : « not found »).
+# Ce Dockerfile reproduit son contenu utile (Ubuntu 22.04 + ROS 2 Humble
+# desktop + outils de dev + utilisateur « xplore »), sans les pilotes
+# matériels du rover (EposCmd, CUDA) inutiles pour l'assignment.
+# Il se construit nativement sur Mac Apple Silicon (arm64) comme sur Intel.
+#
+#   docker build -t ghcr.io/epflxplore/base:humble-desktop -f Dockerfile.local .
+###########################################################################
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Langue et fuseau horaire
+RUN apt-get update && apt-get install -y locales tzdata \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
+    && ln -sf /usr/share/zoneinfo/Europe/Zurich /etc/localtime \
+    && echo Europe/Zurich > /etc/timezone
+ENV LANG=en_US.UTF-8
+ENV TZ=Europe/Zurich
+
+# Outils de base
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl gnupg2 lsb-release sudo software-properties-common wget
+
+# Dépôt ROS 2
+RUN add-apt-repository universe \
+    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" > /etc/apt/sources.list.d/ros2.list
+
+# ROS 2 Humble desktop + outils de développement + exemples utilisés dans le Level 1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-desktop \
+    ros-dev-tools \
+    ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-examples-rclpy-minimal-publisher \
+    ros-humble-examples-rclpy-minimal-subscriber \
+    ros-humble-examples-rclcpp-minimal-publisher \
+    ros-humble-examples-rclcpp-minimal-subscriber \
+    bash-completion build-essential cmake gdb git openssh-client \
+    python3-argcomplete python3-pip vim \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN rosdep init || echo "rosdep already initialized"
+
+ENV ROS_DISTRO=humble
+ENV AMENT_PREFIX_PATH=/opt/ros/humble
+ENV COLCON_PREFIX_PATH=/opt/ros/humble
+ENV LD_LIBRARY_PATH=/opt/ros/humble/lib
+ENV PATH=/opt/ros/humble/bin:$PATH
+ENV PYTHONPATH=/opt/ros/humble/lib/python3.10/site-packages
+ENV ROS_PYTHON_VERSION=3
+ENV ROS_VERSION=2
+ENV AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS=1
+
+# Utilisateur non-root « xplore » avec sudo sans mot de passe
+ENV USERNAME=xplore
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd -s /bin/bash --uid $USER_UID --gid $USER_GID -m $USERNAME \
+    && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME \
+    && usermod -aG dialout,video $USERNAME
+
+# ROS chargé automatiquement dans chaque terminal du container
+RUN echo 'if [ -f /opt/ros/humble/setup.bash ]; then source /opt/ros/humble/setup.bash; fi' >> /home/$USERNAME/.bashrc \
+    && echo 'if [ -f /opt/ros/humble/setup.bash ]; then export _colcon_cd_root=/opt/ros/humble/; fi' >> /home/$USERNAME/.bashrc \
+    && echo 'if [ -f /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash ]; then source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash; fi' >> /home/$USERNAME/.bashrc \
+    && echo 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' >> /home/$USERNAME/.bashrc \
+    && echo 'if [ -f /home/xplore/dev_ws/install/setup.bash ]; then source /home/xplore/dev_ws/install/setup.bash; fi' >> /home/$USERNAME/.bashrc
+
+USER $USERNAME
+RUN mkdir -p /home/$USERNAME/dev_ws/src
+WORKDIR /home/$USERNAME/dev_ws
+CMD ["bash"]
