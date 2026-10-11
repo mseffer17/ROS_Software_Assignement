@@ -41,10 +41,20 @@ class GamepadNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = GamepadNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+
+    try:
+        while rclpy.ok():
+            node.cmd_acquisition()
+
+    except (KeyboardInterrupt, EOFError):
+        pass
+
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
     main()
+
